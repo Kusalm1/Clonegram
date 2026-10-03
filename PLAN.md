@@ -40,7 +40,7 @@ phase ends with acceptance criteria that must pass before moving on.
 | Follow | One-tap follow/unfollow. All accounts public. |
 | Explore | Search people by username or name + grid of recent posts from everyone. |
 | Messages | 1:1 text DMs, realtime. Anyone can message anyone. Unread badge on the Messages tab. |
-| Activity | In-app list of likes, comments, follows on your content (heart icon in Home header). |
+| Activity | In-app list of likes, comments, follows on your content (bell icon in Home header). |
 | Profile | View/edit profile (display name, username, bio, avatar). Followers / following / posts counts. Tappable followers & following lists. |
 | Store compliance (built last) | Accept Terms at sign-up, report post/comment/user, block user, in-app account deletion. |
 | General | Light + dark mode (follows system). English only, strings centralised. Offline banner. |
@@ -50,6 +50,11 @@ Video, private accounts / follow requests, push notifications, group DMs, media 
 sharing posts to DMs, comment likes, "liked by" list, offline reading, web app,
 ranked/popular feeds, in-app admin panel (reports reviewed in the Convex dashboard),
 change-password screen, native one-tap Google/Apple buttons.
+
+Also excluded even though they appear in the `design/` reference images: stories row,
+bookmark/save, comment hearts, composer extras (location, tag people, add testers), Explore
+category chips and People/Posts search toggle, profile location & website fields, a
+"Create" tab.
 
 ---
 
@@ -250,15 +255,63 @@ stack. Exact grouping/route sharing with native tabs **(verify)** in Phase 1.
 `onboarding`; otherwise → `(tabs)`.
 
 **Create button:** `+` icon in the Home header (and Profile header), opens `create` as a modal.
-**Activity:** heart icon in the Home header with an unread dot.
+**Activity:** bell icon in the Home header with an unread dot.
 
 ---
 
 ## 7. UI / UX guidelines
 
+### Design reference
+`design/` holds the visual reference (from
+[burakorkmez/codexgram](https://github.com/burakorkmez/codexgram/tree/master/design), MIT).
+Match these screens for layout, spacing, and components — **except** the features excluded
+in §1.
+
+| File | Use for |
+|---|---|
+| `app-design-ref.png` | Overview of every screen and state (splash, welcome, auth states, onboarding, feed + empty feed, composer, upload progress/error, post detail, explore, search results/empty, profiles, edit profile, followers, inbox, chat, empty states, delete confirmation, bottom sheet) |
+| `design-system-ref.png` | Tokens and components (logo, palette, type, spacing, icons, buttons, inputs, avatars, cards, post card, comment rows, profile stats, empty states, upload progress, nav bars, message bubbles, bottom sheets, destructive confirmation) |
+| `auth-screen-ref.png` | Phase 2 |
+| `home-screen-ref.png`, `post-detail-ref.png`, `comments-ref.png` | Phases 6, 7, 9 |
+| `profile-screen-ref.png`, `edit-profile-ref.png` | Phase 8 |
+| `explore-screen-ref.png` | Phase 9 |
+| `messages-tab-ref.png`, `chat-screen-ref.png` | Phase 10 |
+| `settings-screen-ref.png` | Phases 2 & 14 |
+
+### Design tokens (from `design-system-ref.png`)
+| Token | Light value | Use |
+|---|---|---|
+| `primary` | `#3B82F6` | buttons, links, active tab, own message bubbles |
+| `text` | `#0F172A` | primary text |
+| `secondary` | `#64748B` | secondary text, icons |
+| `border` | `#E5E7EB` | dividers, input borders |
+| `surface` | `#F8FAFC` | cards, inputs, secondary buttons, other-user bubbles |
+| `success` | `#22C55E` | "available", success states |
+| `warning` | `#F59E0B` | warnings |
+| `destructive` | `#EF4444` | delete, report, errors |
+| `info` | `#0EA5E9` | info notices |
+
+Dark-mode values aren't in the reference — derive them (e.g. slate-950 background, slate-900
+surface, slate-800 border, slate-50 text, slate-400 secondary, same primary) and verify contrast.
+
+| Type | Size / weight |
+|---|---|
+| H1 | 34 Bold |
+| H2 | 28 Semibold |
+| H3 | 22 Semibold |
+| Body | 17 Regular |
+| Caption | 15 Regular |
+| Label | 13 Medium |
+
+Font: system font (SF Pro on iOS) — Inter optional on Android **(decide in Phase 4; custom
+fonts load via `expo-font`)**. Spacing scale: 4, 8, 12, 16, 24, 32, 48 (8pt grid).
+Icons: 24px outlined, rounded strokes. Buttons: Primary (filled blue), Secondary (surface),
+Ghost (outline), Destructive (filled red); fully rounded corners on chips and pill buttons.
+
+### Guidelines
 - **Look:** clean, minimal, lots of whitespace, edge-to-edge images, neutral palette with one
   accent colour. Typography-led, thin dividers, no heavy shadows.
-- **Tokens** in `tailwind.config.js` (colours with light/dark variants, spacing, radius).
+- **Tokens** above go in `tailwind.config.js` (colours with light/dark variants, spacing, radius).
   Dark mode via NativeWind `dark:` classes following system setting.
 - **Every list has** a loading skeleton, an empty state with a clear next action, and an error
   state with retry.
@@ -314,7 +367,7 @@ stack. Exact grouping/route sharing with native tabs **(verify)** in Phase 1.
 ### Phase 4 — Design system & app shell
 1. Tokens in Tailwind config; base components: `Button`, `TextField`, `Avatar`, `IconButton`, `EmptyState`, `ErrorState`, `Skeleton`, `OfflineBanner`, `Divider`.
 2. `constants/strings.ts`; formatters (compact counts `1.2k`, relative time `3h`).
-3. Tab stacks with headers; Home header with `+` and heart icons.
+3. Tab stacks with headers; Home header with logo/wordmark, `+` and bell icons.
 4. Offline banner via NetInfo.
 
 **Done when:** components look right in light & dark on both platforms; offline banner appears in airplane mode.
@@ -369,7 +422,7 @@ stack. Exact grouping/route sharing with native tabs **(verify)** in Phase 1.
 ### Phase 11 — Activity
 1. Create notifications inside like/comment/reply/follow mutations; remove on undo.
 2. `activity` screen: grouped by time (Today / This week / Earlier), tap → post or profile.
-3. Unread dot on Home header heart; `markAllRead` when opened.
+3. Unread dot on Home header bell; `markAllRead` when opened.
 
 **Done when:** each action creates exactly one notification for the right person and undo removes it.
 
