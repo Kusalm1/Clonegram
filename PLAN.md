@@ -1,481 +1,496 @@
-# Codexgram — v1 Implementation Plan
+# Codexgram — Implementation Plan
 
-A minimal, mobile-first, Instagram-style photo sharing app. Portfolio project, built to pass
-App Store / Play Store review when we're ready to submit.
+Status: planning complete — nothing implemented yet. Work through §7 step by step; every
+checkbox starts unchecked.
 
-This document is the single source of truth for v1. Work through the phases in order; each
-phase ends with acceptance criteria that must pass before moving on.
+This plan follows the structure and scope of
+[burakorkmez/codexgram `PLAN.md`](https://github.com/burakorkmez/codexgram/blob/master/PLAN.md),
+adapted to our constraints (no paid Apple/Google developer accounts yet, Android + iOS) and
+the decisions we kept from our own interview. Differences from the reference are listed in §10.
 
----
+## 1. Product and agreed scope
 
-## 0. Ground rules for every phase
+Build a polished Instagram-style demo for trusted testers, built to pass App Store / Play
+Store review later.
 
-- **Verify before coding.** Expo SDK 57, Clerk, Convex, and NativeWind change often. Before
-  touching an API, check the current docs (`https://docs.expo.dev/versions/v57.0.0/`,
-  Clerk Expo docs, Convex docs, NativeWind docs). Items marked **(verify)** below are known
-  to be version-sensitive.
-- **Install with `npx expo install <pkg>`** (never `npm install`) so versions match SDK 57.
-  Dev-only tools go in `devDependencies`.
-- **Never edit `ios/` or `android/`** — they are generated. Configure via `app.json` and
-  config plugins.
-- **Definition of done for each step:** `npx expo lint` and `npx tsc --noEmit` pass, and
-  the feature works on **Android (development build)** and **iOS (Expo Go)**.
-- **Only Expo Go–compatible modules in v1** (so iOS can still be tested without an Apple
-  Developer account). If a module isn't in Expo Go, stop and discuss before adding it.
-- Commit at the end of every step with a clear message.
+### Chosen stack
 
----
+- Expo SDK 57, React Native, TypeScript, Expo Router.
+- Native tabs: **Home, Messages, Explore, Profile**.
+- NativeWind for styling.
+- Clerk for authentication and sessions (publishable key only in the client).
+- Convex for application data, backend logic, media storage, and live updates.
 
-## 1. Product scope
+### Platforms and testing
 
-### In v1
-| Area | Features |
-|---|---|
-| Auth | Sign up / sign in with **Google**, **Apple**, or **email + password**. Email sign-up verified with a 6-digit code. Forgot password (reset code by email). |
-| Onboarding | First sign-in → choose unique `@username`, display name, optional avatar. |
-| Posts | Carousel of **1–5 images** + caption. Square (1:1) or portrait (4:5) per post. Caption editable after posting. Delete own posts. |
-| Feed (Home) | Posts from people you follow, newest first, infinite scroll. Own posts not included. |
-| Likes | Tap heart or double-tap image. Optimistic UI. |
-| Comments | One level of threading (replies to a reply attach to the top-level comment with `@username` prefilled). Delete own comments; post owner can delete any comment on their post. Deleting a top-level comment deletes its replies. |
-| Follow | One-tap follow/unfollow. All accounts public. |
-| Explore | Search people by username or name + grid of recent posts from everyone. |
-| Messages | 1:1 text DMs, realtime. Anyone can message anyone. Unread badge on the Messages tab. |
-| Activity | In-app list of likes, comments, follows on your content (bell icon in Home header). |
-| Profile | View/edit profile (display name, username, bio, avatar). Followers / following / posts counts. Tappable followers & following lists. |
-| Store compliance (built last) | Accept Terms at sign-up, report post/comment/user, block user, in-app account deletion. |
-| General | Light + dark mode (follows system). English only, strings centralised. Offline banner. |
+- **Android:** development build (`expo-dev-client`) built with EAS free tier, sideloaded as an APK.
+- **iOS:** Expo Go until an Apple Developer account exists. Therefore v1 uses **only modules
+  included in Expo Go**; anything else needs discussion first.
+- Web is out of scope.
 
-### Out of v1
-Video, private accounts / follow requests, push notifications, group DMs, media in DMs,
-sharing posts to DMs, comment likes, "liked by" list, offline reading, web app,
-ranked/popular feeds, in-app admin panel (reports reviewed in the Convex dashboard),
-change-password screen, native one-tap Google/Apple buttons.
+### Design
 
-Also excluded even though they appear in the `design/` reference images: stories row,
-bookmark/save, comment hearts, composer extras (location, tag people, add testers), Explore
-category chips and People/Posts search toggle, profile location & website fields, a
-"Create" tab.
+- Modern, clean, minimal, mobile-first.
+- **Light and dark mode**, following the system setting.
+- Visual reference in `design/` (see §3); tokens centralised so they apply consistently.
 
----
+### Included
 
-## 2. Tech stack & decisions
+- Sign up / sign in with **Google**, **Apple** (browser-based OAuth) and **email + password**
+  (6-digit email verification code, forgot-password reset code) through a custom welcome screen.
+- Unique-username onboarding.
+- **Single-image or single-video posts** with optional captions; **captions editable** after posting.
+- Follow/unfollow, likes, comments with **one level of replies**.
+- Delete your own posts and comments; **post authors can delete any comment on their posts**.
+- One-to-one live text messages, with inbox search and an Unread filter.
+- **Activity** list (likes, comments, replies, follows) behind a bell icon in the Home header.
+- View/edit profiles.
+- Clearly labeled fictional demo content (seed profiles).
+- **Store compliance (built last):** accept Terms, report content/users, block users, in-app
+  account deletion.
 
-| Concern | Choice | Notes |
-|---|---|---|
-| Framework | Expo SDK 57, React Native 0.86, React 19.2 | Already installed. React Compiler + typed routes enabled. |
-| Navigation | Expo Router, routes in `src/app/` | |
-| Tabs | **Native tabs** — `expo-router/unstable-native-tabs` on SDK 57 **(verify)** | Fallback: Expo Router JS `Tabs` if Phase 1 spike fails in Expo Go on iOS. Native tab bar is **not** styleable with NativeWind (uses system look). |
-| Styling | **NativeWind v4.2.7** + **Tailwind CSS v3** | v4.2.7 is the stable release with SDK 57 support. Do **not** use v5 (RC). |
-| Auth | **Clerk** via `@clerk/expo` **(verify package name)**, publishable key only | Custom-built screens (Clerk's prebuilt native components don't run in Expo Go). Token cache in `expo-secure-store`. |
-| Social sign-in | Browser-based OAuth (`useSSO`, strategies `oauth_google`, `oauth_apple`) | Works in Expo Go and dev builds, iOS + Android. Clerk dev instance supplies shared Google/Apple credentials — no Google Cloud / Apple account needed for development. |
-| Email/password | Clerk `useSignUp` / `useSignIn` custom flows **(verify hook API)** | Email code verification; reset-password code flow. |
-| Backend / DB | **Convex** (queries, mutations, file storage, realtime) | Clerk ↔ Convex via `ConvexProviderWithClerk` from `convex/react-clerk` + `convex/auth.config.ts`. |
-| Images | `expo-image-picker` (multi-select, up to 5), `expo-image-manipulator` (center-crop to chosen ratio, resize ~1080px wide, JPEG ~0.8), `expo-image` for display | Stored in Convex file storage. No separate thumbnails in v1. |
-| Connectivity | `@react-native-community/netinfo` **(verify Expo Go inclusion)** | For the offline banner. |
-| Builds | EAS Build free tier; `development` profile → Android APK (sideload). `expo-dev-client` | iOS dev build blocked until an Apple Developer account exists — iOS tested in Expo Go. |
-| Budget | Free tiers of Clerk, Convex, EAS | Confirm current limits on pricing pages in Phase 0. |
+### Excluded
+
+Web delivery, private accounts, follow requests, stories, carousels, bookmarks/saves, in-app
+capture/editing, comment likes, "liked by" lists, push notifications, group chats, message
+attachments/editing/deletion, typing indicators, read receipts, payments, background
+uploads, persistent offline drafts, full UI automation, admin UI (reports reviewed in the
+Convex dashboard), Explore category chips, People/Posts search toggle, composer extras
+(location, tagging), profile location/website fields, a "Create" tab, native one-tap
+Google/Apple buttons.
+
+The demo is free.
+
+## 2. Starting point and implementation constraints
+
+The repository contains a minimal Stack layout and placeholder screen, ESLint (flat config),
+iOS `bundleIdentifier` / Android `package` `com.kusalm.codexgram`, an EAS project with
+`development` / `preview` / `production` profiles, and the `design/` reference images.
+
+Declared versions:
+
+| Package | Current project declaration |
+| --- | --- |
+| Expo | `~57.0.26` |
+| Expo Router | `~57.0.24` |
+| React | `19.2.3` |
+| React Native | `0.86.3` |
+| TypeScript | `~6.0.3` |
+
+Candidate versions (verify when installing; always via `npx expo install`):
+
+- NativeWind `4.2.7` (stable, adds SDK 57 support) with **Tailwind CSS v3**. Do not use NativeWind v5 (RC).
+- `@clerk/expo` — current version at install time.
+- `convex` — current version at install time.
+
+Rules:
+
+- Read the [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/) before writing code
+  that touches Expo APIs. Use current [Clerk Expo](https://clerk.com/docs/expo/getting-started/quickstart),
+  [Convex Clerk integration](https://docs.convex.dev/auth/clerk), and
+  [NativeWind installation](https://www.nativewind.dev/docs/getting-started/installation) docs.
+  Items marked **(verify)** are version-sensitive.
+- Never edit generated `ios/` / `android/` folders; configure via `app.json` and config plugins.
+- Do not silently change the selected stack or downgrade Expo.
+- Definition of done for every step: `npx expo lint` and `npx tsc --noEmit` pass and the feature
+  works on the Android dev build and iOS Expo Go. Commit at the end of each step.
+
+Confirmed Expo Go availability (SDK 57 docs): `expo-image-picker`, `expo-video`.
+Native tabs on SDK 57 import from `expo-router/unstable-native-tabs` **(verify in Expo Go)**.
+
+### Authentication constraints
+
+- Client only gets `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. Clerk's secret key never ships in the app.
+- Browser-based OAuth via Clerk `useSSO` (`oauth_google`, `oauth_apple`) works in Expo Go and
+  dev builds on both platforms. Clerk **development** instances use shared Google/Apple
+  credentials — no Google Cloud project or Apple account needed for development.
+- Clerk **production** instances require custom Google (Google Cloud) and Apple (Services ID,
+  Key ID, Team ID, private key) credentials — needed before launch (§7 Step 11).
+- Clerk links an OAuth sign-in to an existing account with the same **verified** email.
+  Apple "Hide My Email" users get a relay address and therefore a separate account.
 
 ### Environment variables
+
 | Name | Where | Value |
-|---|---|---|
-| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `.env.local` (app) | Clerk dashboard → API keys |
-| `EXPO_PUBLIC_CONVEX_URL` | `.env.local` (app) | Written by `npx convex dev` |
-| `CLERK_JWT_ISSUER_DOMAIN` | Convex dashboard env vars (dev + prod) | Clerk Frontend API URL **(verify exact name/format)** |
+| --- | --- | --- |
+| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `.env.local` | Clerk dashboard → API keys |
+| `EXPO_PUBLIC_CONVEX_URL` | `.env.local` | Written by `npx convex dev` |
+| `CLERK_JWT_ISSUER_DOMAIN` | Convex dashboard env (dev + prod) | Clerk Frontend API URL **(verify)** |
 
-`.env*.local` is already gitignored. **Never** put Clerk's secret key in the app.
+`.env*.local` is gitignored.
 
----
+## 3. Design reference
 
-## 3. Auth model
-
-- **One account per verified email.** Clerk automatically links a Google sign-in to an
-  existing account with the same verified email (Clerk docs: *"Clerk links the OAuth account
-  to the existing account and signs the user in"*).
-- **Apple "Hide My Email"** users get a relay address → they become a separate account. Expected.
-- **After any successful sign-in/up:** app has a Clerk session → query `users.me` in Convex:
-  - `null` → `/onboarding`
-  - user row exists → tabs (Home)
-- **Convex identity:** every function calls `ctx.auth.getUserIdentity()`; `identity.subject`
-  = Clerk user ID = `users.clerkId`. Shared helpers `requireIdentity(ctx)` and
-  `requireUser(ctx)` (throws if no Convex user row yet).
-- **Clerk dashboard settings (dev instance):**
-  - Enable: Google, Apple (social connections); Email address + Password.
-  - Email verification: **email code** at sign-up.
-  - Disable: username, phone, magic links (username lives in Convex, not Clerk).
-  - Allow users to delete their own account (needed in Phase 14) **(verify setting name)**.
-  - Add the app's redirect URL(s) for native OAuth (`codexgram://…` and Expo Go `exp://…`) to the allowlist if required **(verify)**.
-
----
-
-## 4. Data model (Convex `convex/schema.ts`)
-
-All timestamps use Convex `_creationTime` unless noted. Counts are **denormalised** and
-updated in the same mutation that changes the underlying data.
-
-### `users`
-| Field | Type | Rules |
-|---|---|---|
-| `clerkId` | string | unique — index `by_clerkId` |
-| `username` | string | unique, lowercase, `^[a-z0-9._]{3,30}$`, no leading/trailing `.` — index `by_username` |
-| `displayName` | string | 1–50 chars |
-| `bio` | string? | ≤ 150 chars |
-| `avatarStorageId` | Id<"_storage">? | uploaded avatar |
-| `avatarUrl` | string? | fallback from Google/Clerk image; initials if neither |
-| `followersCount`, `followingCount`, `postsCount` | number | default 0 |
-| `termsAcceptedAt` | number? | set at onboarding (Phase 14 enforces) |
-| `searchName` | string | lowercase `username + " " + displayName` — search index `search_name` |
-
-### `posts`
-| Field | Type | Rules |
-|---|---|---|
-| `authorId` | Id<"users"> | index `by_author` |
-| `images` | Id<"_storage">[] | length 1–5 |
-| `aspect` | `"1:1" \| "4:5"` | |
-| `caption` | string | ≤ 2,200 chars |
-| `editedAt` | number? | set when caption edited |
-| `likesCount`, `commentsCount` | number | default 0 |
-
-### `follows`
-`followerId`, `followingId` (both Id<"users">). Indexes: `by_follower`, `by_following`,
-`by_pair` (`followerId`, `followingId`) — enforces uniqueness. Cannot follow self.
-
-### `likes`
-`userId`, `postId`. Indexes: `by_post`, `by_user_post` (uniqueness).
-
-### `comments`
-| Field | Type | Rules |
-|---|---|---|
-| `postId` | Id<"posts"> | index `by_post` |
-| `authorId` | Id<"users"> | |
-| `parentId` | Id<"comments">? | must be a **top-level** comment; index `by_parent` |
-| `text` | string | 1–500 chars |
-
-### `conversations`
-| Field | Type | Rules |
-|---|---|---|
-| `participantA`, `participantB` | Id<"users"> | stored sorted (A < B) → index `by_pair` guarantees one per pair |
-| `lastMessageAt` | number | |
-| `lastMessagePreview` | string | first ~80 chars |
-| `lastReadA`, `lastReadB` | number | per-participant read timestamp |
-
-Indexes: `by_participantA_last`, `by_participantB_last` (for the inbox list sorted by recency).
-*(Alternative to evaluate in Phase 10: a `conversationMembers` table — simpler querying. Pick one, document why.)*
-
-### `messages`
-`conversationId`, `senderId`, `text` (1–1,000 chars). Index `by_conversation`.
-
-### `notifications`
-| Field | Type | Rules |
-|---|---|---|
-| `recipientId` | Id<"users"> | index `by_recipient` |
-| `actorId` | Id<"users"> | |
-| `type` | `"like" \| "comment" \| "reply" \| "follow"` | |
-| `postId` | Id<"posts">? | |
-| `commentId` | Id<"comments">? | |
-| `read` | boolean | |
-
-No notification when acting on your own content. Unlike / unfollow / delete removes the matching notification.
-
-### Phase 14 tables
-- `reports`: `reporterId`, `targetType` (`post|comment|user`), `targetId` (string), `reason`, `details?`, `status` (`open|reviewed`).
-- `blocks`: `blockerId`, `blockedId`. Indexes `by_blocker`, `by_blocked`, `by_pair`.
-
----
-
-## 5. Convex functions (planned API)
-
-`convex/` at project root. Every public function validates args with `v.*` validators and
-checks auth. Mutations enforce all rules server-side (never trust the client).
-
-| File | Functions |
-|---|---|
-| `users.ts` | `me` (q), `getByUsername` (q), `isUsernameAvailable` (q), `completeOnboarding` (m), `updateProfile` (m), `generateAvatarUploadUrl` (m), `search` (q, paginated) |
-| `posts.ts` | `generateUploadUrl` (m), `create` (m), `updateCaption` (m), `remove` (m — cascades likes, comments, notifications, storage files, decrements `postsCount`), `getById` (q), `feed` (q, paginated), `explore` (q, paginated), `byAuthor` (q, paginated) |
-| `likes.ts` | `toggle` (m) |
-| `follows.ts` | `toggle` (m), `followers` (q, paginated), `following` (q, paginated), `isFollowing` (q) |
-| `comments.ts` | `list` (q — top-level paginated, replies grouped), `add` (m), `remove` (m — cascade replies, fix `commentsCount`) |
-| `conversations.ts` | `getOrCreate` (m), `list` (q, paginated), `unreadCount` (q), `markRead` (m) |
-| `messages.ts` | `list` (q, paginated, newest first), `send` (m) |
-| `notifications.ts` | `list` (q, paginated), `unreadCount` (q), `markAllRead` (m) |
-| `lib/auth.ts` | `requireIdentity`, `requireUser` helpers |
-| `lib/validation.ts` | username regex, length limits (shared constants) |
-| Phase 14 | `reports.create`, `blocks.toggle`, `blocks.list`, `users.deleteAccount` |
-
-Post queries return a **hydrated** shape the UI can render directly:
-`{ post, author: { username, displayName, avatar }, imageUrls[], likedByMe, isMine }`.
-
-**Feed strategy (v1): fan-in on read.** `feed` loads the viewer's following IDs and pages
-through recent posts filtered to those authors. Fine at portfolio scale. If it becomes slow,
-switch to fan-out-on-write (a `feedItems` table written on post create). Document the trade-off in code.
-
----
-
-## 6. App structure (`src/`)
-
-```
-src/
-  app/
-    _layout.tsx                 # ClerkProvider → ConvexProviderWithClerk → auth gate
-    (auth)/
-      _layout.tsx               # stack, only when signed out
-      welcome.tsx               # Google / Apple / Email buttons
-      sign-in.tsx               # email + password
-      sign-up.tsx               # email + password
-      verify-email.tsx          # 6-digit code
-      forgot-password.tsx       # request code → new password
-    onboarding.tsx              # signed in, no Convex user row yet
-    (tabs)/
-      _layout.tsx               # NativeTabs: home, messages, explore, profile
-      home/        _layout.tsx (Stack), index.tsx
-      messages/    _layout.tsx, index.tsx
-      explore/     _layout.tsx, index.tsx
-      profile/     _layout.tsx, index.tsx
-    create.tsx                  # modal: pick → ratio → caption → post
-    post/[id].tsx               # post detail (+ edit caption / delete menu)
-    comments/[postId].tsx       # form-sheet modal, threaded comments
-    user/[username].tsx         # other user's profile
-    user/[username]/followers.tsx
-    user/[username]/following.tsx
-    chat/[conversationId].tsx   # DM thread
-    activity.tsx                # notifications list
-    edit-profile.tsx            # modal
-    settings.tsx                # sign out (+ Phase 14: terms, blocked users, delete account)
-  components/                   # PostCard, ImageCarousel, Avatar, Button, TextField, EmptyState, OfflineBanner, ...
-  hooks/                        # useCurrentUser, useDoubleTap, useNetworkStatus, ...
-  lib/                          # clerk token cache, image processing, formatters (relative time, counts)
-  constants/strings.ts          # all user-facing copy
-convex/                         # backend (see §5)
-```
-
-Shared routes (`post/[id]`, `user/[username]`, …) are pushed on top of the current tab's
-stack. Exact grouping/route sharing with native tabs **(verify)** in Phase 1.
-
-**Auth gate:** in the root layout, use Expo Router's protected routes (`Stack.Protected` with
-`guard`) **(verify on SDK 57)** — signed out → `(auth)`; signed in without user row →
-`onboarding`; otherwise → `(tabs)`.
-
-**Create button:** `+` icon in the Home header (and Profile header), opens `create` as a modal.
-**Activity:** bell icon in the Home header with an unread dot.
-
----
-
-## 7. UI / UX guidelines
-
-### Design reference
 `design/` holds the visual reference (from
 [burakorkmez/codexgram](https://github.com/burakorkmez/codexgram/tree/master/design), MIT).
-Match these screens for layout, spacing, and components — **except** the features excluded
-in §1.
+Match layout, spacing, and components — **except** features excluded in §1.
 
 | File | Use for |
-|---|---|
-| `app-design-ref.png` | Overview of every screen and state (splash, welcome, auth states, onboarding, feed + empty feed, composer, upload progress/error, post detail, explore, search results/empty, profiles, edit profile, followers, inbox, chat, empty states, delete confirmation, bottom sheet) |
-| `design-system-ref.png` | Tokens and components (logo, palette, type, spacing, icons, buttons, inputs, avatars, cards, post card, comment rows, profile stats, empty states, upload progress, nav bars, message bubbles, bottom sheets, destructive confirmation) |
-| `auth-screen-ref.png` | Phase 2 |
-| `home-screen-ref.png`, `post-detail-ref.png`, `comments-ref.png` | Phases 6, 7, 9 |
-| `profile-screen-ref.png`, `edit-profile-ref.png` | Phase 8 |
-| `explore-screen-ref.png` | Phase 9 |
-| `messages-tab-ref.png`, `chat-screen-ref.png` | Phase 10 |
-| `settings-screen-ref.png` | Phases 2 & 14 |
+| --- | --- |
+| `app-design-ref.png` | Overview of every screen and state |
+| `design-system-ref.png` | Tokens and components |
+| `auth-screen-ref.png` | Step 2 |
+| `home-screen-ref.png`, `post-detail-ref.png`, `comments-ref.png` | Steps 4–5 |
+| `profile-screen-ref.png`, `edit-profile-ref.png` | Steps 3, 5 |
+| `explore-screen-ref.png` | Step 5 |
+| `messages-tab-ref.png`, `chat-screen-ref.png` | Step 6 |
+| `settings-screen-ref.png` | Steps 2, 9 |
 
-### Design tokens (from `design-system-ref.png`)
-| Token | Light value | Use |
-|---|---|---|
-| `primary` | `#3B82F6` | buttons, links, active tab, own message bubbles |
+### Tokens (from `design-system-ref.png`)
+
+| Token | Light | Use |
+| --- | --- | --- |
+| `primary` | `#3B82F6` | buttons, links, active states, own message bubbles |
 | `text` | `#0F172A` | primary text |
 | `secondary` | `#64748B` | secondary text, icons |
 | `border` | `#E5E7EB` | dividers, input borders |
-| `surface` | `#F8FAFC` | cards, inputs, secondary buttons, other-user bubbles |
-| `success` | `#22C55E` | "available", success states |
+| `surface` | `#F8FAFC` | cards, inputs, secondary buttons, others' bubbles |
+| `success` | `#22C55E` | "available", success |
 | `warning` | `#F59E0B` | warnings |
 | `destructive` | `#EF4444` | delete, report, errors |
-| `info` | `#0EA5E9` | info notices |
+| `info` | `#0EA5E9` | info / demo-content notices |
 
-Dark-mode values aren't in the reference — derive them (e.g. slate-950 background, slate-900
-surface, slate-800 border, slate-50 text, slate-400 secondary, same primary) and verify contrast.
+Dark values are not in the reference — derive them (e.g. slate-950 background, slate-900
+surface, slate-800 border, slate-50 text, slate-400 secondary, same primary) and check contrast.
 
-| Type | Size / weight |
-|---|---|
-| H1 | 34 Bold |
-| H2 | 28 Semibold |
-| H3 | 22 Semibold |
-| Body | 17 Regular |
-| Caption | 15 Regular |
-| Label | 13 Medium |
+Typography (system font / SF Pro; Inter on Android optional — decide in Step 1):
+H1 34 Bold · H2 28 Semibold · H3 22 Semibold · Body 17 Regular · Caption 15 Regular · Label 13 Medium.
+Spacing: 4, 8, 12, 16, 24, 32, 48 (8pt grid). Icons: 24px outlined, rounded strokes.
+Buttons: Primary (filled), Secondary (surface), Ghost (outline), Destructive (filled red).
 
-Font: system font (SF Pro on iOS) — Inter optional on Android **(decide in Phase 4; custom
-fonts load via `expo-font`)**. Spacing scale: 4, 8, 12, 16, 24, 32, 48 (8pt grid).
-Icons: 24px outlined, rounded strokes. Buttons: Primary (filled blue), Secondary (surface),
-Ghost (outline), Destructive (filled red); fully rounded corners on chips and pill buttons.
+## 4. Screens and user journeys
 
-### Guidelines
-- **Look:** clean, minimal, lots of whitespace, edge-to-edge images, neutral palette with one
-  accent colour. Typography-led, thin dividers, no heavy shadows.
-- **Tokens** above go in `tailwind.config.js` (colours with light/dark variants, spacing, radius).
-  Dark mode via NativeWind `dark:` classes following system setting.
-- **Every list has** a loading skeleton, an empty state with a clear next action, and an error
-  state with retry.
-- **Optimistic updates** for like, follow, comment add/delete, send message.
-- **Accessibility:** labels on icon-only buttons, minimum 44pt touch targets, sufficient
-  contrast in both themes, support Dynamic Type where practical.
-- **Safe areas** handled with `react-native-safe-area-context`.
-- **Performance:** `FlatList`/`FlashList`-style virtualised lists (stick to `FlatList` unless
-  a perf issue appears — FlashList availability in Expo Go **(verify)**), `expo-image` with
-  caching, paginated queries, no unbounded `.collect()` on large tables.
+### Authentication and onboarding
 
----
+1. Show a custom welcome screen with **Continue with Google**, **Continue with Apple**, and
+   **Continue with email**.
+2. Google/Apple use a combined sign-up/sign-in flow (one button handles new and returning users).
+3. Email: sign-in and create-account forms; new accounts verify a 6-digit email code;
+   forgot-password sends a reset code then sets a new password.
+4. After authentication, resolve the corresponding Convex profile.
+5. New users choose a unique username before entering the tabs.
+6. Prefill an editable display name and avatar when the provider supplies them.
+7. Photo and bio remain optional.
+8. Returning users enter Home after session/profile loading completes.
+9. Sign-out from Profile → Settings.
 
-## 8. Implementation phases
+Handle cancellation, provider errors, wrong password, email already taken, invalid/expired
+code, missing provider profile fields, session expiry, and interrupted onboarding.
 
-### Phase 0 — Housekeeping
-1. Commit pending changes (ESLint config, `tsconfig.json` exclude, iOS `bundleIdentifier`).
-2. Decide on `example/` folder (delete or keep as reference — it's gitignored).
-3. Create Clerk application (dev instance) and configure per §3.
-4. Create Convex project: `npx convex dev` (creates `convex/`, writes `EXPO_PUBLIC_CONVEX_URL`).
-5. Confirm free-tier limits (Clerk MAU, Convex storage/bandwidth/function calls, EAS builds/month) and note them here.
+### Home and posting
 
-**Done when:** clean working tree, both dashboards exist, `.env.local` populated (not committed).
+- Home shows the **current user's posts and followed users' posts**, newest first.
+- Paginate results; pull to refresh.
+- Header: logo/wordmark, **+** (opens composer), **bell** (opens Activity, unread dot).
+- Select one image or video from the device library.
+- Add an optional caption and publish.
+- Show upload progress and prevent duplicate submissions.
+- Publish only after successful upload and validation.
+- Keep the composer open during upload; warn before abandoning an active upload.
+- Failed uploads expose retry; unused uploads are cleaned up.
+- Post authors can **edit the caption** (shows "edited") or delete the post.
 
-### Phase 1 — Foundation spike (de-risk before building features)
-1. Install NativeWind 4.2.7 + Tailwind CSS v3 following the official SDK-57 guide (`tailwind.config.js`, `global.css`, Babel/Metro config, `nativewind-env.d.ts`).
-2. Set up native tabs with 4 placeholder screens, SF Symbols (iOS) / Material icons (Android), and a test badge on Messages.
-3. Install `expo-dev-client`; build Android dev build: `npx eas-cli@latest build --profile development --platform android`; install the APK.
-4. Run on **iOS Expo Go** and **Android dev build**.
+Limits (enforced on client **and** backend):
 
-**Done when:** NativeWind classes (incl. `dark:`) render on both; native tabs + badge work on both.
-**If native tabs fail in iOS Expo Go:** switch to Expo Router JS `Tabs`, record the decision here.
+- Images: maximum 10 MB.
+- Videos: maximum 30 seconds and 50 MB. (`videoMaxDuration` only limits recording, so check
+  the picked asset's `duration` — milliseconds — ourselves.)
+- No automatic compression or video-processing service.
+- Media keeps its original aspect ratio, displayed clamped between 4:5 portrait and 1.91:1
+  landscape (store `width`/`height`).
+- Videos show a preview, play inline on tap (`expo-video`), and stop when offscreen or when
+  the app goes inactive.
 
-### Phase 2 — Auth
-1. Install `@clerk/expo`, `expo-secure-store`, `expo-auth-session`/`expo-crypto` if required by `useSSO` **(verify deps)**, `convex`.
-2. Root providers: `ClerkProvider` (publishable key + secure-store token cache) → `ConvexProviderWithClerk` (`useAuth` from Clerk).
-3. `convex/auth.config.ts` with `CLERK_JWT_ISSUER_DOMAIN`, `applicationID: "convex"`.
-4. Screens: `welcome` (Google, Apple, "Continue with email"), `sign-in`, `sign-up`, `verify-email`, `forgot-password`.
-5. Auth gate in root layout (signed out → `(auth)`).
-6. Sign out (temporary button on Profile).
-7. Friendly error mapping for Clerk errors (wrong password, email taken, invalid code, cancelled OAuth).
+Empty Home offers discovery (Explore) and post creation.
 
-**Done when:** on both platforms a user can sign up and sign in with Google, Apple, and email+password (incl. verification code and password reset), session survives app restart, sign-out works, and `ctx.auth.getUserIdentity()` returns the user in a test Convex query.
+### Explore and profiles
 
-### Phase 3 — Users & onboarding
-1. Schema: `users` table + indexes.
-2. `users.me`, `isUsernameAvailable` (debounced live check), `completeOnboarding`, `generateAvatarUploadUrl`.
-3. `onboarding` screen: username (validated + availability), display name (prefilled from Clerk/OAuth name), optional avatar (prefilled from OAuth image).
-4. Gate: signed in + `me === null` → onboarding.
+- Profiles and posts are visible only to signed-in members; no anonymous browsing.
+- Explore shows all members' posts, newest first, in a grid, with user search.
+- Search usernames and display names; empty search shows "No results found".
+- Selecting a result opens the member's profile.
+- Profiles show avatar, username, display name, bio, post grid, and posts/follower/following
+  counts; follower and following lists are tappable.
+- Other profiles expose Follow/Unfollow and Message.
+- Following takes effect immediately; there are no approval requests.
+- Own profile exposes editing for all four profile fields (avatar, display name, username, bio).
+- Username changes preserve relationships through stable IDs.
 
-**Done when:** a new user lands on onboarding exactly once; usernames are unique (server-enforced, race-safe); a returning user goes straight to tabs.
+### Likes, comments, and deletion
 
-### Phase 4 — Design system & app shell
-1. Tokens in Tailwind config; base components: `Button`, `TextField`, `Avatar`, `IconButton`, `EmptyState`, `ErrorState`, `Skeleton`, `OfflineBanner`, `Divider`.
-2. `constants/strings.ts`; formatters (compact counts `1.2k`, relative time `3h`).
-3. Tab stacks with headers; Home header with logo/wordmark, `+` and bell icons.
-4. Offline banner via NetInfo.
+- One like per user per post; support unlike; tap heart or double-tap media.
+- Comments are displayed chronologically, with **one level of replies**: replying to a reply
+  attaches to the same top-level comment with `@username` prefilled; replies collapse under
+  "View N replies".
+- Members can delete their own comments and posts; **a post author can also delete any
+  comment on their post**.
+- Deleting a top-level comment also deletes its replies.
+- Confirm destructive actions.
+- Removing a post also removes associated likes, comments, notifications, and media.
 
-**Done when:** components look right in light & dark on both platforms; offline banner appears in airplane mode.
+### Messages
 
-### Phase 5 — Create post
-1. `posts` schema; `generateUploadUrl`, `create`.
-2. `create` modal: multi-select up to 5 → choose 1:1 or 4:5 (preview) → center-crop + resize ~1080px + compress → caption → Post.
-3. Upload progress, per-image failure handling, retry; disable Post until all uploaded. Clean up orphaned storage files on failure.
-4. Increment `postsCount`.
+- Any real member can start a one-to-one conversation from another member's profile.
+- Reuse the existing conversation for that pair; no self-chat.
+- Messages tab lists conversations by latest message, with **member search** and an
+  **All / Unread** filter; unread count badge on the Messages tab.
+- Conversation screens show paginated history and live text updates.
+- Show pending and failed sends; allow manual retry without duplicates.
+- Only participants can access a conversation.
 
-**Done when:** posting 1 and 5 images works on both platforms; >5 is blocked; post appears on own profile.
+No groups, attachments, typing indicators, read receipts, or message editing/deletion.
 
-### Phase 6 — Home feed, post card, likes
-1. `PostCard`: header (avatar, username, `…` menu), `ImageCarousel` (paging + dot indicator, fixed aspect), actions (like, comment), likes count, caption (expandable), "View all N comments", relative time, "edited".
-2. `posts.feed` paginated; infinite scroll; pull-to-refresh.
-3. `likes.toggle` + optimistic update + double-tap heart animation (Reanimated).
-4. Empty state → "Find people on Explore".
-5. Owner menu: edit caption, delete post (confirm).
+Fictional seed profiles cannot authenticate or reply; show a clear notice ("Fictional demo
+content") before and inside such a chat.
 
-**Done when:** following someone shows their posts newest-first; likes are instant and consistent across devices; edit/delete work and update everywhere.
+### Activity
 
-### Phase 7 — Comments
-1. `comments` schema; `list`, `add`, `remove`.
-2. `comments/[postId]` sheet: top-level list, replies under each (collapsed "View N replies"), reply button prefills `@username` and attaches to the top-level parent, input bar above keyboard.
-3. Delete rules: own comment, or any comment on own post; cascade replies; `commentsCount` stays correct.
+- Bell icon in Home header with an unread dot.
+- List of likes, comments, replies, and follows on your content, grouped Today / This week / Earlier.
+- Tap → post or profile. Opening the screen marks all as read.
+- No notification for acting on your own content; undo (unlike, unfollow, delete) removes it.
 
-**Done when:** threading behaves as specified; counts are accurate after add/delete/cascade.
+### Settings and store compliance (Step 9)
 
-### Phase 8 — Profiles & follow
-1. Own profile: avatar, name, username, bio, counts, Edit Profile, Settings, 3-column post grid.
-2. Other profile `user/[username]`: Follow/Unfollow (optimistic) + Message.
-3. `follows.toggle` updating both users' counts; followers/following lists (paginated, with follow buttons).
-4. `edit-profile`: display name, username (re-validated), bio, avatar.
+- Settings: sign out, blocked accounts, Terms & Privacy links, contact email, delete account.
+- Accept Terms at onboarding (stored timestamp).
+- Report a post, comment, or profile with a reason (bottom-sheet menu).
+- Block a user: hides their posts, comments, and profile from you and prevents DMs both ways.
+- Delete account: confirm → delete all the user's data and media in Convex → delete the Clerk
+  user from the client → signed out.
 
-**Done when:** counts stay correct under rapid follow/unfollow; username change is reflected everywhere.
+## 5. Data, interfaces, and backend responsibilities
 
-### Phase 9 — Explore & post detail
-1. Search bar → `users.search` (debounced); results list.
-2. Recent posts grid (`posts.explore`, paginated) → tap → `post/[id]`.
-3. `post/[id]` detail screen reusing `PostCard`.
+Clerk owns authentication identity and sessions. Convex owns editable app profiles and all
+social data.
 
-**Done when:** search finds users by username and display name; grid paginates smoothly.
+| Entity | Minimum information |
+| --- | --- |
+| Profile (`users`) | Stable ID, optional Clerk ID (absent for seed profiles), unique normalized username, display name, avatar reference, bio, demo marker, denormalized counts, terms-accepted time |
+| Post | Author ID, media storage reference, media type (`image`/`video`), width, height, video duration, optional caption, edited time, like/comment counts, creation time |
+| Follow | Follower ID, followed-user ID |
+| Like | User ID, post ID |
+| Comment | Post ID, author ID, optional parent (top-level) comment ID, text, creation time |
+| Conversation | Canonical participant pair (sorted), latest-message time and preview, per-participant last-read time |
+| Message | Conversation ID, sender ID, text, creation time, client-generated retry/deduplication ID |
+| Upload | Owner ID, storage reference, intended use (`post`/`avatar`), lifecycle state (`pending`/`attached`/`abandoned`), creation time |
+| Notification | Recipient ID, actor ID, type (`like`/`comment`/`reply`/`follow`), optional post/comment ID, read flag |
+| Report | Reporter ID, target type/ID, reason, details, status |
+| Block | Blocker ID, blocked ID |
 
-### Phase 10 — Messages
-1. Finalise conversation schema choice (see §4).
-2. `getOrCreate` (from profile Message button), `list` (inbox, by recency, with preview & unread dot), `messages.list` / `send`, `markRead` on open/focus.
-3. Chat UI: bubbles, timestamps grouping, input bar, keyboard handling, optimistic send.
-4. `unreadCount` → badge on the Messages native tab.
+Text limits: username `^[a-z0-9._]{3,30}$` (normalized lowercase), display name 1–50,
+bio ≤ 150, caption ≤ 2,200, comment 1–500, message 1–1,000.
 
-**Done when:** two devices chat in realtime; unread badge increments and clears correctly.
+### Backend interfaces
 
-### Phase 11 — Activity
-1. Create notifications inside like/comment/reply/follow mutations; remove on undo.
-2. `activity` screen: grouped by time (Today / This week / Earlier), tap → post or profile.
-3. Unread dot on Home header bell; `markAllRead` when opened.
+Use typed Convex queries and mutations (`v.*` validators) for profile onboarding/editing,
+feeds, search, follows, likes, comments, uploads, post publication/editing/deletion,
+conversations, messages, activity, reports, blocks, and account deletion.
 
-**Done when:** each action creates exactly one notification for the right person and undo removes it.
+- Derive the acting user from verified authentication (`ctx.auth.getUserIdentity()`).
+- Never trust a client-supplied author or sender identity.
+- Enforce ownership and conversation membership on the backend.
+- Enforce unique usernames, follow pairs, like pairs, and conversation pairs transactionally.
+- Use stable IDs rather than usernames for relationships.
+- Authenticate upload creation, publication, and media access.
+- Validate text, media metadata (type, size, duration), and resource existence.
+- Make retries safe for publication (an upload can be attached once) and message sending
+  (dedupe by client ID).
+- Clean up abandoned uploads and deleted media through retry-safe scheduled work (Convex cron).
+- Bootstrap profiles idempotently after authentication; app-profile edits remain authoritative in Convex.
+- Apply blocks in feed, explore, search, profile, comment, and message queries.
+- Feed strategy: fan-in on read (following IDs + own ID, paged by recency). Acceptable at
+  demo scale; switch to fan-out-on-write if it becomes slow.
 
-### Phase 12 — Polish
-Empty/error/loading states everywhere, accessibility pass, dark-mode pass, performance pass
-(long feed scroll, image memory), app icon & splash, haptics on like/follow.
+No separate REST server, billing service, analytics service, or video-processing service is required.
 
-### Phase 13 — QA pass
-Run every flow in §1 on Android dev build and iOS Expo Go, two accounts, including:
-slow network, airplane mode, app kill/restart, deleting a post someone else is viewing,
-deleting a comment with replies, username race, 5-image post on slow network.
+## 6. State, failure behavior, and operating defaults
 
-### Phase 14 — Store compliance (required before submission)
-1. **Terms:** checkbox/notice at sign-up/onboarding linking to Terms of Use & Privacy Policy (host simple pages); store `termsAcceptedAt`.
-2. **Report:** `…` menu on posts, comments, profiles → reason picker → `reports.create`. Review in Convex dashboard.
-3. **Block:** from profile menu; hides the blocked user's posts/comments/profile and prevents DMs in both directions; Settings → Blocked accounts (unblock).
-4. **Delete account:** Settings → Delete account (confirm) → `users.deleteAccount` deletes all user data and storage files and fixes counts on others → Clerk `user.delete()` from the client → signed out.
-5. Contact/support email visible in Settings.
+- Convex is the source of truth; use live subscriptions where appropriate.
+- Keep already loaded content visible during connection loss.
+- Show connection status (offline banner) and actionable errors.
+- Optimistic likes/follows must roll back on failure.
+- Retain unsent text in the active screen for retry.
+- Do not promise draft recovery after app termination.
+- Stop media playback when offscreen or the app becomes inactive.
+- Handle library-picker cancellation and unavailable media gracefully.
+- Request only permissions required for selected features.
+- Every list has loading, empty, and error states.
+- Accessibility: labels on icon-only buttons, 44pt touch targets, contrast in both themes.
+- Use development diagnostics and Convex logs without recording tokens, private message
+  bodies, or unnecessary personal data.
+- Start with a development environment (Clerk dev instance, Convex dev deployment).
 
-**Done when:** each feature works end-to-end and a deleted user leaves no orphaned data.
+## 7. Step-by-step implementation checklist
 
-### Phase 15 — Launch prep (when accounts exist)
-1. Buy Apple Developer account ($99/yr) and Google Play Console ($25 one-time).
-2. Clerk **production instance**: custom Google OAuth credentials (Google Cloud, app "In production") and Apple credentials (Services ID, Key ID, Team ID, private key) — **required**, shared dev credentials don't work in production.
-3. Convex production deployment + `CLERK_JWT_ISSUER_DOMAIN` for the prod Clerk instance.
-4. EAS `production` builds; iOS dev build/TestFlight testing; store listings, screenshots, privacy policy URL, data-safety / privacy nutrition labels, account-deletion web link for Google Play.
-5. `eas submit`.
+### Step 1 — Verify foundation
 
----
+- [ ] Preserve existing repository changes; create Clerk (dev) and Convex projects; fill `.env.local`.
+- [ ] Verify SDK/package compatibility; confirm current free-tier limits (Clerk, Convex, EAS).
+- [ ] Configure NativeWind 4.2.7 + Tailwind v3 with light **and dark** design tokens from §3.
+- [ ] Establish the four native tabs and supporting stack/modal navigation (fallback: JS tabs if native tabs fail in iOS Expo Go).
+- [ ] Build and install the Android development build; run iOS in Expo Go.
 
-## 9. Assumptions (agreed defaults — revisit if wrong)
+**Complete when:** The app launches on both platforms with functioning native navigation and styling in both themes.
 
-1. Store-compliance features are in v1 but built last (Phase 14).
-2. Your own posts don't appear in your Home feed.
-3. Avatar defaults to the OAuth profile photo; otherwise initials.
-4. Usernames can be changed; the old one is freed immediately.
-5. Counts are denormalised and updated in mutations.
-6. Full-size images are used in grids (no thumbnails in v1).
-7. No app-level rate limits beyond input limits (5 images, text lengths).
-8. Two Convex deployments (dev, prod) and two Clerk instances; no CI in v1 — lint + typecheck before each commit.
-9. "Done" = every flow works on Android dev build + iOS Expo Go; manual testing, no automated test suite in v1.
-10. No analytics or crash reporting in v1 — Convex dashboard logs only.
-11. Image cropping is automatic center-crop to the chosen ratio (no manual crop UI in v1).
-12. The create-post entry point is a `+` in the Home (and Profile) header since there are exactly 4 tabs.
+### Step 2 — Configure authentication
 
-## 10. Open risks
+- [ ] Configure Clerk (Google, Apple, email + password, email-code verification).
+- [ ] Add the custom welcome screen, Google/Apple (`useSSO`) and email sign-in/sign-up, verification, and forgot-password screens.
+- [ ] Configure secure session persistence (`expo-secure-store`) and protected navigation.
+- [ ] Add sign-out and authentication failure states.
 
-1. **Native tabs in iOS Expo Go** unconfirmed on SDK 57 (`unstable-native-tabs`) — de-risked in Phase 1, fallback JS tabs.
-2. **NativeWind can't style the native tab bar** or other system UI.
-3. **OAuth redirect differences** between Expo Go (`exp://`) and the dev build (`codexgram://`) — both must be allowed in Clerk.
-4. **iOS testing limited to Expo Go** until an Apple Developer account exists; no native-only modules in v1.
-5. **Production OAuth credentials required** for Google and Apple at launch (Apple needs the paid account).
-6. **Free-tier limits** (Convex storage/bandwidth from images is the main driver) — monitor in dashboards.
-7. **Fan-in feed** may slow down at larger scale — migration path to fan-out documented.
-8. **Store review** may ask for EULA link, contact info, and moderation response details beyond Phase 14.
-9. **Apple Hide-My-Email** users can't be linked to an email/password account with their real email.
+**Complete when:** All three methods work on Android dev build and iOS Expo Go, and sessions survive restart.
+
+### Step 3 — Establish Convex and profiles
+
+- [ ] Configure Clerk authentication in Convex (`convex/auth.config.ts`).
+- [ ] Add data definitions, indexes, and authorization helpers.
+- [ ] Implement idempotent profile creation and username onboarding.
+- [ ] Implement profile editing and retrieval.
+
+**Complete when:** Two real users have distinct profiles and cannot edit each other's data.
+
+### Step 4 — Build media and posts
+
+- [ ] Add library selection and media validation (type, size, duration).
+- [ ] Implement upload tracking, progress, publication, retry, and abandonment behavior.
+- [ ] Implement post display, video previews, inline playback, caption editing, and deletion.
+- [ ] Add storage cleanup (cron for abandoned uploads, cascade on delete).
+
+**Complete when:** Supported images/videos publish and play, and failed uploads never create visible incomplete posts.
+
+### Step 5 — Build discovery and social interactions
+
+- [ ] Implement follow/unfollow and follower/following lists.
+- [ ] Implement Home, Explore, search, and profile grids.
+- [ ] Add likes (incl. double-tap), comments with one level of replies, and comment deletion rules.
+- [ ] Add pagination, empty states, and missing/deleted-content handling.
+
+**Complete when:** Two accounts can discover each other and complete every social interaction.
+
+### Step 6 — Build messaging
+
+- [ ] Create/reuse conversations from profiles.
+- [ ] Implement ordered chat lists with search, Unread filter, and tab badge; paginated live conversations.
+- [ ] Add pending/failed sends and duplicate-safe retries.
+- [ ] Verify participant-only access.
+
+**Complete when:** Two devices exchange messages live without duplicate conversations or retry-generated messages.
+
+### Step 7 — Build activity
+
+- [ ] Create/remove notifications inside like, comment, reply, and follow mutations.
+- [ ] Build the Activity screen and the bell unread dot; mark all read on open.
+
+**Complete when:** Each action creates exactly one notification for the right person and undo removes it.
+
+### Step 8 — Seed and polish
+
+- [ ] Add an idempotent development-only seed routine.
+- [ ] Source licensed sample imagery and a short video for a few fictional profiles.
+- [ ] Clearly mark fictional profiles and their messaging limitations.
+- [ ] Apply the design reference across all screens, in light and dark mode.
+- [ ] Verify keyboard behavior, accessibility labels, contrast, and touch targets.
+
+**Complete when:** The demo feels populated and polished without presenting fictional activity as real.
+
+### Step 9 — Store compliance
+
+- [ ] Terms acceptance at onboarding; Terms/Privacy pages and contact email in Settings.
+- [ ] Report post, comment, and profile.
+- [ ] Block/unblock users and a blocked-accounts list; apply blocks everywhere.
+- [ ] In-app account deletion (Convex data + media, then Clerk user).
+
+**Complete when:** Each feature works end-to-end and a deleted account leaves no orphaned data.
+
+### Step 10 — Validate and deliver
+
+- [ ] Run type checking and lint.
+- [ ] Run focused backend permission and invariant tests (§8).
+- [ ] Complete the two-account acceptance walkthrough on Android dev build and iOS Expo Go.
+- [ ] Verify cancellation, connection loss, retries, app restart, and deletion.
+- [ ] Document setup, environment variables, seeding, and known limitations.
+
+**Complete when:** The app passes the agreed acceptance checks on real Android and iOS devices.
+
+### Step 11 — Launch prep (when accounts exist)
+
+- [ ] Apple Developer ($99/yr) and Google Play Console ($25) accounts.
+- [ ] Clerk production instance with custom Google and Apple credentials.
+- [ ] Convex production deployment and `CLERK_JWT_ISSUER_DOMAIN` for production.
+- [ ] iOS development build / TestFlight testing; EAS production builds.
+- [ ] Store listings, privacy labels / data safety, account-deletion web link (Google Play); `eas submit`.
+
+## 8. Test scenarios
+
+Automate critical backend cases (e.g. `convex-test` + Vitest **(verify)**):
+
+- Unauthenticated access is rejected.
+- Users cannot alter another user's profile, posts, or comments (except post authors deleting comments on their own posts).
+- Nonparticipants cannot read or send conversation messages.
+- Concurrent username claims cannot produce duplicates.
+- Repeated likes/follows cannot produce duplicate relationships; counts stay correct.
+- Concurrent chat initiation reuses one conversation.
+- Message/publication retries do not duplicate content.
+- Post deletion removes dependent records and schedules media cleanup.
+- Deleting a comment removes its replies and keeps counts correct.
+- Invalid or unauthorized uploads cannot be published; size/duration limits are enforced.
+- Blocked users cannot message or see each other's content.
+- Account deletion removes all of the user's data.
+
+Manually verify:
+
+- Google, Apple, and email first sign-up, returning login, verification code, password reset, cancellation, and logout.
+- Missing provider name/avatar and interrupted onboarding.
+- Image/video selection, size/duration boundaries, playback, and failed upload.
+- Feed ordering, following changes, search, and pagination.
+- Comment replies, caption editing, and activity entries.
+- Empty screens and content removed while being viewed.
+- Live chat across two accounts and failed-send retry.
+- Connection loss, restoration, and session persistence.
+- Layout, keyboard, safe areas, native tabs, and both themes on real Android and iOS devices.
+
+## 9. Assumptions and unresolved risks
+
+### Assumptions/defaults
+
+- Working name: Codexgram.
+- English only, one member role, no admin UI.
+- No fixed deadline; stay within free tiers of Clerk, Convex, and EAS.
+- Modest trusted-tester usage.
+- Basic accessibility is included.
+- Development-only environment initially.
+- Deleting a post removes dependent comments, likes, notifications, and media.
+- No separate analytics or alerting integration.
+- Usernames can be changed; the old one is freed immediately.
+- Counts are denormalized and updated in mutations.
+- Avatar defaults to the provider photo; otherwise initials.
+- Composer entry point is the `+` in the Home header (exactly 4 tabs).
+
+### Open risks
+
+- Native tabs (`unstable-native-tabs`) in iOS Expo Go are unverified — fallback JS tabs.
+- NativeWind cannot style the native tab bar.
+- OAuth redirect differs between Expo Go (`exp://`) and the dev build (`codexgram://`); both must work with Clerk.
+- iOS testing is limited to Expo Go until an Apple Developer account exists.
+- Production Google/Apple credentials are required at launch (Apple needs the paid account).
+- Uncompressed images (≤10 MB) and videos (≤50 MB) make Convex storage/bandwidth the main free-tier risk.
+- Original-video formats, previews, upload handling, and playback need real-device testing on both platforms.
+- Member-only media access must be enforced beyond navigation; Convex file URLs are unguessable but not access-controlled — do not assume possession of a file URL proves authorization.
+- Licensed sample assets remain to be selected.
+- Fan-in feed may slow down at larger scale.
+- Store review may ask for EULA, contact info, and moderation response details beyond Step 9.
+
+## 10. Differences from the reference plan
+
+| Area | Reference | This plan |
+| --- | --- | --- |
+| Platform | iPhone only, native dev build | Android dev build + iOS Expo Go |
+| Sign-in | Native Google/Apple | Browser-based Google/Apple + email/password |
+| Caption editing | No | Yes |
+| Comments | Flat; authors delete only their own | One level of replies; post authors can delete any comment on their post |
+| Activity | None | Bell-icon activity list |
+| Theme | Light only | Light + dark |
+| Store compliance | Excluded | Report, block, account deletion, terms (Step 9) |
+| Launch | Internal demo only | Launch prep planned (Step 11) |
