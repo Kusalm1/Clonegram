@@ -160,6 +160,47 @@ H1 34 Bold · H2 28 Semibold · H3 22 Semibold · Body 17 Regular · Caption 15 
 Spacing: 4, 8, 12, 16, 24, 32, 48 (8pt grid). Icons: 24px outlined, rounded strokes.
 Buttons: Primary (filled), Secondary (surface), Ghost (outline), Destructive (filled red).
 
+### Assets
+
+`assets/` includes the files from
+[burakorkmez/codexgram `assets/`](https://github.com/burakorkmez/codexgram/tree/master/assets) (MIT).
+The original source of the sample photos is unknown — fine for a demo, but replace them with
+images you own or that are clearly licensed before a public store release.
+
+**Branding**
+
+| File | Size | Use | Step |
+| --- | --- | --- | --- |
+| `images/logo.png` | 1254×1254, glossy camera mark, transparent edges | Source for app icon, adaptive icon foreground, and splash image | 1 |
+| `images/codexgram-mark.png` | 149×145, flat camera mark | Home header logo next to the "Codexgram" wordmark; welcome screen | 2, 4 |
+| `images/auth-demo-img.png` | 1402×1122, mountain photo in a rounded blob | Welcome-screen hero illustration | 2 |
+| `images/community-note.png` | 225×136, handwritten "Good people are built with great people." | Decorative note on welcome / empty states | 2, 8 |
+
+**Seed content** (fictional demo profiles — Step 8; seed routine uploads them to Convex storage
+through the same compression pipeline so they behave like real posts)
+
+| Folder | Files | Use |
+| --- | --- | --- |
+| `images/feed/` | `alex`, `casey`, `jordan`, `maya`, `taylor` (avatars), `dog-avatar`, `dog`, `lake` | Fictional users' avatars and Home feed posts |
+| `images/explore/` | `alex`, `casey`, `jordan`, `maya`, `taylor` (avatars), `santorini` | Explore grid / search results |
+| `images/profile/` | `avatar`, `edit-avatar`, `photo-1` … `photo-9` | A fictional profile with a full 9-post grid; edit-profile preview |
+| `images/chat/` | `avatar`, `lake` | Fictional chat partner avatar and shared-photo context |
+
+**Template leftovers** (unused — delete in Step 8 polish): `expo-badge*.png`, `expo-logo.png`,
+`react-logo*.png`, `tutorial-web.png`, `tabIcons/*` (native tabs use SF Symbols / Material icons).
+`expo.icon/` is the iOS 26 icon bundle — regenerate from `logo.png` in Step 1.
+
+**Icon & splash work (Step 1):**
+- App icons must be square with **no transparency** on iOS: export `logo.png` onto a solid
+  `#3B82F6`-family background at 1024×1024 → `images/icon.png`; clean the stray dark pixels at
+  the transparent edges first.
+- Android adaptive icon: foreground = camera mark centered inside the 66% safe zone on
+  transparency; background = solid primary blue; monochrome = white silhouette of the mark.
+- Splash: `expo-splash-screen` plugin image = the mark, background `#FFFFFF` (light) /
+  slate-950 (dark) — update `app.json`.
+- Large source images (`auth-demo-img.png` 2.1 MB, `logo.png` 1.2 MB) — compress/resize
+  before shipping in the bundle.
+
 ## 4. Screens and user journeys
 
 ### Authentication and onboarding
@@ -344,6 +385,7 @@ No separate REST server, billing service, analytics service, or image/video-proc
 - [ ] Verify SDK/package compatibility; confirm current free-tier limits (Clerk, Convex, EAS).
 - [ ] Configure NativeWind 4.2.7 + Tailwind v3 with light **and dark** design tokens from §3.
 - [ ] Establish the four native tabs and supporting stack/modal navigation (fallback: JS tabs if native tabs fail in iOS Expo Go).
+- [ ] Replace the Expo placeholder app icon, adaptive icon, `expo.icon`, and splash with Codexgram branding from `assets/images/logo.png` (see §3 Assets).
 - [ ] Build and install the Android development build; run iOS in Expo Go.
 
 **Complete when:** The app launches on both platforms with functioning native navigation and styling in both themes.
@@ -403,7 +445,8 @@ No separate REST server, billing service, analytics service, or image/video-proc
 ### Step 8 — Seed and polish
 
 - [ ] Add an idempotent development-only seed routine.
-- [ ] Source licensed sample imagery for a few fictional profiles (run through the same compression).
+- [ ] Seed fictional profiles from `assets/images/{feed,explore,profile,chat}/` (run through the same compression).
+- [ ] Remove unused template assets (see §3 Assets).
 - [ ] Clearly mark fictional profiles and their messaging limitations.
 - [ ] Apply the design reference across all screens, in light and dark mode.
 - [ ] Verify keyboard behavior, accessibility labels, contrast, and touch targets.
@@ -495,7 +538,7 @@ Manually verify:
   (≈700 worst-case 5-image posts, ≈3,000+ single-image posts fit in 1 GB storage) — still check the Convex usage dashboard weekly; confirm whether file serving
   counts toward the 1 GB egress allowance and how often it resets.
 - Member-only media access must be enforced beyond navigation; Convex file URLs are unguessable but not access-controlled — do not assume possession of a file URL proves authorization.
-- Licensed sample assets remain to be selected.
+- Sample photos come from the MIT-licensed reference repo but their original source is unknown — replace with owned/clearly licensed images before a public store release.
 - Fan-in feed may slow down at larger scale.
 - Store review may ask for EULA, contact info, and moderation response details beyond Step 9.
 
