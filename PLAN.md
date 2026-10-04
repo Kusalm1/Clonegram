@@ -39,7 +39,7 @@ Store review later.
 - Sign up / sign in with **Google**, **Apple** (browser-based OAuth) and **email + password**
   (6-digit email verification code, forgot-password reset code) through a custom welcome screen.
 - Unique-username onboarding.
-- **Single-image or single-video posts** with optional captions; **captions editable** after posting.
+- **Image carousel posts — 1 to 5 images** (square or portrait, compressed on device) with optional captions; **captions editable** after posting.
 - Follow/unfollow, likes, comments with **one level of replies**.
 - Delete your own posts and comments; **post authors can delete any comment on their posts**.
 - One-to-one live text messages, with inbox search and an Unread filter.
@@ -51,7 +51,8 @@ Store review later.
 
 ### Excluded
 
-Web delivery, private accounts, follow requests, stories, carousels, bookmarks/saves, in-app
+**Video posts (deferred until a development build that can compress video exists)**,
+web delivery, private accounts, follow requests, stories, bookmarks/saves, in-app
 capture/editing, comment likes, "liked by" lists, push notifications, group chats, message
 attachments/editing/deletion, typing indicators, read receipts, payments, background
 uploads, persistent offline drafts, full UI automation, admin UI (reports reviewed in the
@@ -95,7 +96,8 @@ Rules:
 - Definition of done for every step: `npx expo lint` and `npx tsc --noEmit` pass and the feature
   works on the Android dev build and iOS Expo Go. Commit at the end of each step.
 
-Confirmed Expo Go availability (SDK 57 docs): `expo-image-picker`, `expo-video`.
+Confirmed Expo Go availability (SDK 57 docs): `expo-image-picker`, `expo-image-manipulator`
+(use `ImageManipulator.manipulate()` / `useImageManipulator` — `manipulateAsync` is deprecated).
 Native tabs on SDK 57 import from `expo-router/unstable-native-tabs` **(verify in Expo Go)**.
 
 ### Authentication constraints
@@ -182,24 +184,37 @@ code, missing provider profile fields, session expiry, and interrupted onboardin
 - Home shows the **current user's posts and followed users' posts**, newest first.
 - Paginate results; pull to refresh.
 - Header: logo/wordmark, **+** (opens composer), **bell** (opens Activity, unread dot).
-- Select one image or video from the device library.
+- Select **1–5 images** from the device library (multi-select, `selectionLimit: 5`), shown in
+  selection order; the composer allows removing/reordering before posting.
+- Choose the post's shape: **square (1:1)** or **portrait (4:5)**; every image in the post is
+  center-cropped to that shape so the carousel height never jumps.
 - Add an optional caption and publish.
+- In the feed and post detail, images display as a swipeable **carousel** with a dot indicator
+  and an "n/5" counter; grids show the first image with a small multi-image icon.
 - Show upload progress and prevent duplicate submissions.
 - Publish only after successful upload and validation.
 - Keep the composer open during upload; warn before abandoning an active upload.
 - Failed uploads expose retry; unused uploads are cleaned up.
 - Post authors can **edit the caption** (shows "edited") or delete the post.
 
-Limits (enforced on client **and** backend):
+Image processing and limits (sized to stay inside Convex's free 1 GB storage / 1 GB egress):
 
-- Images: maximum 10 MB.
-- Videos: maximum 30 seconds and 50 MB. (`videoMaxDuration` only limits recording, so check
-  the picked asset's `duration` — milliseconds — ourselves.)
-- No automatic compression or video-processing service.
-- Media keeps its original aspect ratio, displayed clamped between 4:5 portrait and 1.91:1
-  landscape (store `width`/`height`).
-- Videos show a preview, play inline on tap (`expo-video`), and stop when offscreen or when
-  the app goes inactive.
+- Before upload, on device with `expo-image-manipulator`, center-crop each picked image to the
+  chosen shape, then produce JPEGs:
+  - **Full image (each of 1–5):** **1080×1080** (square) or **1080×1350** (portrait), JPEG
+    quality **0.75** (typically 150–400 KB).
+  - **Thumbnail (first image only):** **400 px** wide, same shape, JPEG quality **0.7**
+    (typically 30–60 KB) — used in profile and Explore grids, Activity, and anywhere the post
+    is shown small.
+- **Hard caps after compression** (enforced on client **and** backend via upload metadata):
+  each full image ≤ **1 MB**, thumbnail ≤ **150 KB**, **max 5 images per post**. Reject with
+  a clear message otherwise.
+- Accept any picker image type the manipulator can read (JPEG, PNG, HEIC); output is always JPEG.
+- Images upload in parallel (max 2 at a time) with per-image progress; a failed image can be
+  retried individually; the post is published only when every image is uploaded.
+- Avatars: square crop, ≤ **400 px**, quality 0.75, ≤ **150 KB** (no separate thumbnail).
+- Feed carousels load only the visible image and its neighbour, so unswiped images are never downloaded.
+- Rely on `expo-image` disk caching so repeat views don't re-download.
 
 Empty Home offers discovery (Explore) and post creation.
 
@@ -267,13 +282,13 @@ social data.
 | Entity | Minimum information |
 | --- | --- |
 | Profile (`users`) | Stable ID, optional Clerk ID (absent for seed profiles), unique normalized username, display name, avatar reference, bio, demo marker, denormalized counts, terms-accepted time |
-| Post | Author ID, media storage reference, media type (`image`/`video`), width, height, video duration, optional caption, edited time, like/comment counts, creation time |
+| Post | Author ID, ordered list of 1–5 full-image storage references, thumbnail storage reference (first image), shape (`1:1`/`4:5`), optional caption, edited time, like/comment counts, creation time |
 | Follow | Follower ID, followed-user ID |
 | Like | User ID, post ID |
 | Comment | Post ID, author ID, optional parent (top-level) comment ID, text, creation time |
 | Conversation | Canonical participant pair (sorted), latest-message time and preview, per-participant last-read time |
 | Message | Conversation ID, sender ID, text, creation time, client-generated retry/deduplication ID |
-| Upload | Owner ID, storage reference, intended use (`post`/`avatar`), lifecycle state (`pending`/`attached`/`abandoned`), creation time |
+| Upload | Owner ID, storage reference, intended use (`post`/`postThumb`/`avatar`), size in bytes, lifecycle state (`pending`/`attached`/`abandoned`), creation time |
 | Notification | Recipient ID, actor ID, type (`like`/`comment`/`reply`/`follow`), optional post/comment ID, read flag |
 | Report | Reporter ID, target type/ID, reason, details, status |
 | Block | Blocker ID, blocked ID |
@@ -293,7 +308,8 @@ conversations, messages, activity, reports, blocks, and account deletion.
 - Enforce unique usernames, follow pairs, like pairs, and conversation pairs transactionally.
 - Use stable IDs rather than usernames for relationships.
 - Authenticate upload creation, publication, and media access.
-- Validate text, media metadata (type, size, duration), and resource existence.
+- Validate text, image metadata (content type `image/jpeg`, byte size against the caps — read
+  from Convex storage metadata, not trusted from the client), and resource existence.
 - Make retries safe for publication (an upload can be attached once) and message sending
   (dedupe by client ID).
 - Clean up abandoned uploads and deleted media through retry-safe scheduled work (Convex cron).
@@ -302,7 +318,7 @@ conversations, messages, activity, reports, blocks, and account deletion.
 - Feed strategy: fan-in on read (following IDs + own ID, paged by recency). Acceptable at
   demo scale; switch to fan-out-on-write if it becomes slow.
 
-No separate REST server, billing service, analytics service, or video-processing service is required.
+No separate REST server, billing service, analytics service, or image/video-processing service is required.
 
 ## 6. State, failure behavior, and operating defaults
 
@@ -312,7 +328,6 @@ No separate REST server, billing service, analytics service, or video-processing
 - Optimistic likes/follows must roll back on failure.
 - Retain unsent text in the active screen for retry.
 - Do not promise draft recovery after app termination.
-- Stop media playback when offscreen or the app becomes inactive.
 - Handle library-picker cancellation and unavailable media gracefully.
 - Request only permissions required for selected features.
 - Every list has loading, empty, and error states.
@@ -353,12 +368,12 @@ No separate REST server, billing service, analytics service, or video-processing
 
 ### Step 4 — Build media and posts
 
-- [ ] Add library selection and media validation (type, size, duration).
+- [ ] Add multi-image selection (max 5), shape choice, on-device crop/compression (full images + thumbnail), and size validation.
 - [ ] Implement upload tracking, progress, publication, retry, and abandonment behavior.
-- [ ] Implement post display, video previews, inline playback, caption editing, and deletion.
+- [ ] Implement post display (swipeable carousel with indicator in feed/detail, thumbnail + multi-image icon in grids), caption editing, and deletion (removes all of the post's images).
 - [ ] Add storage cleanup (cron for abandoned uploads, cascade on delete).
 
-**Complete when:** Supported images/videos publish and play, and failed uploads never create visible incomplete posts.
+**Complete when:** 1-image and 5-image posts publish within the size caps, a 6th image is blocked, (verify real sizes in the Convex dashboard), and failed uploads never create visible incomplete posts.
 
 ### Step 5 — Build discovery and social interactions
 
@@ -388,7 +403,7 @@ No separate REST server, billing service, analytics service, or video-processing
 ### Step 8 — Seed and polish
 
 - [ ] Add an idempotent development-only seed routine.
-- [ ] Source licensed sample imagery and a short video for a few fictional profiles.
+- [ ] Source licensed sample imagery for a few fictional profiles (run through the same compression).
 - [ ] Clearly mark fictional profiles and their messaging limitations.
 - [ ] Apply the design reference across all screens, in light and dark mode.
 - [ ] Verify keyboard behavior, accessibility labels, contrast, and touch targets.
@@ -435,7 +450,7 @@ Automate critical backend cases (e.g. `convex-test` + Vitest **(verify)**):
 - Message/publication retries do not duplicate content.
 - Post deletion removes dependent records and schedules media cleanup.
 - Deleting a comment removes its replies and keeps counts correct.
-- Invalid or unauthorized uploads cannot be published; size/duration limits are enforced.
+- Invalid or unauthorized uploads cannot be published; non-JPEG files, files over the size caps, and posts with 0 or more than 5 images are rejected.
 - Blocked users cannot message or see each other's content.
 - Account deletion removes all of the user's data.
 
@@ -443,7 +458,8 @@ Manually verify:
 
 - Google, Apple, and email first sign-up, returning login, verification code, password reset, cancellation, and logout.
 - Missing provider name/avatar and interrupted onboarding.
-- Image/video selection, size/duration boundaries, playback, and failed upload.
+- Image selection (JPEG, PNG, HEIC, very large photos), 1 vs 5 images, square vs portrait crop, compression output sizes, size-cap boundaries, and one image failing mid-upload.
+- Carousel swiping, indicator, and double-tap like on any slide.
 - Feed ordering, following changes, search, and pagination.
 - Comment replies, caption editing, and activity entries.
 - Empty screens and content removed while being viewed.
@@ -475,8 +491,9 @@ Manually verify:
 - OAuth redirect differs between Expo Go (`exp://`) and the dev build (`codexgram://`); both must work with Clerk.
 - iOS testing is limited to Expo Go until an Apple Developer account exists.
 - Production Google/Apple credentials are required at launch (Apple needs the paid account).
-- Uncompressed images (≤10 MB) and videos (≤50 MB) make Convex storage/bandwidth the main free-tier risk.
-- Original-video formats, previews, upload handling, and playback need real-device testing on both platforms.
+- Free-tier usage is controlled by compression, thumbnails, lazy carousel loading, and caching
+  (≈700 worst-case 5-image posts, ≈3,000+ single-image posts fit in 1 GB storage) — still check the Convex usage dashboard weekly; confirm whether file serving
+  counts toward the 1 GB egress allowance and how often it resets.
 - Member-only media access must be enforced beyond navigation; Convex file URLs are unguessable but not access-controlled — do not assume possession of a file URL proves authorization.
 - Licensed sample assets remain to be selected.
 - Fan-in feed may slow down at larger scale.
@@ -494,3 +511,4 @@ Manually verify:
 | Theme | Light only | Light + dark |
 | Store compliance | Excluded | Report, block, account deletion, terms (Step 9) |
 | Launch | Internal demo only | Launch prep planned (Step 11) |
+| Post media | Single image or video (≤10 MB image, ≤30 s / 50 MB video), no compression | Carousel of 1–5 images (square or 4:5), compressed on device (1080 px, ≤1 MB each) plus a 400 px thumbnail; video deferred |
